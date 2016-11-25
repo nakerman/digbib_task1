@@ -7,6 +7,7 @@ import org.apache.lucene.index.*;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
+import org.apache.lucene.search.similarities.*;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.pdfbox.cos.COSDocument;
@@ -92,7 +93,7 @@ public class Main{
                 System.out.print("> ");
                 continue;
             }
-            ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+            ScoreDoc[] scoreDocs = defaultScorer(topDocs);
 
             System.out.println("- A total of " + topDocs.totalHits + " PDFs matched your query.");
             System.out.println("- The top results are:");
@@ -180,6 +181,16 @@ public class Main{
 
                 Document document = new Document();
                 document.add(new Field("content", documentText, fieldType));
+
+		//get first 100 words of string
+	        ArrayList<String> stringArr = new ArrayList<String>(Arrays.asList(documentText.split("\\s+")));
+		stringArr.subList(100, stringArr.size() - 1).clear();
+		String introString = String.join(" ", stringArr);
+		//if appears in first 100 words, then is more valid
+                Field intro = new Field("intro", introString, fieldType);
+                intro.setBoost(5.0f);
+		document.add(intro);
+		
                 indexWriter.addDocument(document);
             }
 
@@ -202,6 +213,7 @@ public class Main{
 
             IndexReader reader = DirectoryReader.open(ramDirectory);
             IndexSearcher searcher = new IndexSearcher(reader);
+            searcher.setSimilarity(new FairSim());
             topDocs = searcher.search(query, numberTopDocs);
         }
         catch(IOException ex) {
@@ -210,4 +222,26 @@ public class Main{
 
         return topDocs;
     }
+
+    private static ScoreDoc[] defaultScorer(TopDocs topDocs) {
+	ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+	return scoreDocs;
+    }
+}
+
+//modified similarity classes
+class FairSim extends ClassicSimilarity {
+
+    //@Override
+    //does not take into account the length of the field, thus producing "fair" indexing
+    public float lengthNorm (FieldInvertState state) {
+	    return (float)(1.0 / state.getLength());
+    }
+
+    @Override
+    //does not sqrt the frequency of term in document, thus considering only term freq
+    public float tf(float freq) {
+	return (float)freq;
+    }
+
 }
