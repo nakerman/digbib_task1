@@ -9,6 +9,7 @@ import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.similarities.*;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.pdfbox.cos.COSDocument;
 import org.apache.pdfbox.pdfparser.PDFParser;
@@ -18,6 +19,7 @@ import org.apache.pdfbox.io.RandomAccessFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Scanner;
@@ -26,7 +28,8 @@ import java.util.regex.Pattern;
 public class Main{
 
     static StandardAnalyzer analyzer = null;
-    static Directory ramDirectory = null;
+    static FSDirectory fsDirectory = null;
+    static ArrayList<File> pdfFiles = null;
 
     public static void main(String[] args) {
         String DIR = ".";
@@ -69,7 +72,7 @@ public class Main{
 
 
         //INDEX
-        indexPdfs(documentsText);
+        indexPdfs(documentsText, DIR);
 
         System.out.println("- Finished Indexing PDFs.");
         System.out.println("");
@@ -99,7 +102,7 @@ public class Main{
             System.out.println("- The top results are:");
 
             for(int id = 0; id < scoreDocs.length; id++) {
-                System.out.println("- Number " + scoreDocs[id].doc + " with a score of: " + scoreDocs[id].score);
+                System.out.println("- " + pdfFiles.get(scoreDocs[id].doc).getName() + " with a score of: " + scoreDocs[id].score);
             }
 
             System.out.println("");
@@ -116,6 +119,7 @@ public class Main{
     {
         ArrayList<String> documentsText = new ArrayList<String>();
         ArrayList<File> files = new ArrayList<File>();
+        pdfFiles = new ArrayList<File>();
 
         getFilesInDirectory(files, directory);
 
@@ -124,7 +128,7 @@ public class Main{
 
             for(File file : files) {
                 if(!file.getName().substring(file.getName().length()-4).equals(".pdf")) continue;
-
+                pdfFiles.add(file);
                 RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
                 PDFParser parser =  new PDFParser(randomAccessFile);
                 parser.parse();
@@ -165,12 +169,12 @@ public class Main{
     /**
      * @param documentsText list containing the text of the pdfs
      */
-    private static void indexPdfs(ArrayList<String> documentsText) {
+    private static void indexPdfs(ArrayList<String> documentsText, String directory) {
         try {
             analyzer = new StandardAnalyzer();
-            ramDirectory = new RAMDirectory();
+            fsDirectory = FSDirectory.open(Paths.get(directory + "/indexfiles"));
             IndexWriterConfig config = new IndexWriterConfig(analyzer);
-            IndexWriter indexWriter = new IndexWriter(ramDirectory, config);
+            IndexWriter indexWriter = new IndexWriter(fsDirectory, config);
 
             for(int i = 0; i < documentsText.size(); i++)
             {
@@ -182,14 +186,13 @@ public class Main{
                 Document document = new Document();
                 document.add(new Field("content", documentText, fieldType));
 
-		//get first 100 words of string
-	        ArrayList<String> stringArr = new ArrayList<String>(Arrays.asList(documentText.split("\\s+")));
-		stringArr.subList(100, stringArr.size() - 1).clear();
-		String introString = String.join(" ", stringArr);
-		//if appears in first 100 words, then is more valid
+                //get first 100 words of string
+	            ArrayList<String> stringArr = new ArrayList<String>(Arrays.asList(documentText.split("\\s+")));
+		        String introString = String.join(" ", stringArr.subList(0, 101));
+		        //if appears in first 100 words, then is more valid
                 Field intro = new Field("intro", introString, fieldType);
                 intro.setBoost(5.0f);
-		document.add(intro);
+		        document.add(intro);
 		
                 indexWriter.addDocument(document);
             }
@@ -211,7 +214,7 @@ public class Main{
         try {
             Query query = new QueryParser("content", analyzer).parse(searchString);
 
-            IndexReader reader = DirectoryReader.open(ramDirectory);
+            IndexReader reader = DirectoryReader.open(fsDirectory);
             IndexSearcher searcher = new IndexSearcher(reader);
             searcher.setSimilarity(new FairSim());
             topDocs = searcher.search(query, numberTopDocs);
