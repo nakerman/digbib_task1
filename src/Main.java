@@ -9,6 +9,7 @@ import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.similarities.*;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.pdfbox.cos.COSDocument;
 import org.apache.pdfbox.pdfparser.PDFParser;
@@ -18,6 +19,7 @@ import org.apache.pdfbox.io.RandomAccessFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Scanner;
@@ -26,7 +28,8 @@ import java.util.regex.Pattern;
 public class Main{
 
     static StandardAnalyzer analyzer = null;
-    static Directory ramDirectory = null;
+    static FSDirectory fsDirectory = null;
+    static ArrayList<File> files = null;
 
     public static void main(String[] args) {
         String DIR = ".";
@@ -69,7 +72,7 @@ public class Main{
 
 
         //INDEX
-        indexPdfs(documentsText);
+        indexPdfs(documentsText, DIR);
 
         System.out.println("- Finished Indexing PDFs.");
         System.out.println("");
@@ -99,7 +102,7 @@ public class Main{
             System.out.println("- The top results are:");
 
             for(int id = 0; id < scoreDocs.length; id++) {
-                System.out.println("- Number " + scoreDocs[id].doc + " with a score of: " + scoreDocs[id].score);
+                System.out.println("- " + files.get(scoreDocs[id].doc).getName() + " with a score of: " + scoreDocs[id].score);
             }
 
             System.out.println("");
@@ -115,7 +118,7 @@ public class Main{
     private static ArrayList<String> extractTextFromPdfs(String directory)
     {
         ArrayList<String> documentsText = new ArrayList<String>();
-        ArrayList<File> files = new ArrayList<File>();
+        files = new ArrayList<File>();
 
         getFilesInDirectory(files, directory);
 
@@ -165,12 +168,12 @@ public class Main{
     /**
      * @param documentsText list containing the text of the pdfs
      */
-    private static void indexPdfs(ArrayList<String> documentsText) {
+    private static void indexPdfs(ArrayList<String> documentsText, String directory) {
         try {
             analyzer = new StandardAnalyzer();
-            ramDirectory = new RAMDirectory();
+            fsDirectory = FSDirectory.open(Paths.get(directory + "/indexfiles"));
             IndexWriterConfig config = new IndexWriterConfig(analyzer);
-            IndexWriter indexWriter = new IndexWriter(ramDirectory, config);
+            IndexWriter indexWriter = new IndexWriter(fsDirectory, config);
 
             for(int i = 0; i < documentsText.size(); i++)
             {
@@ -211,7 +214,7 @@ public class Main{
         try {
             Query query = new QueryParser("content", analyzer).parse(searchString);
 
-            IndexReader reader = DirectoryReader.open(ramDirectory);
+            IndexReader reader = DirectoryReader.open(fsDirectory);
             IndexSearcher searcher = new IndexSearcher(reader);
             searcher.setSimilarity(new FairSim());
             topDocs = searcher.search(query, numberTopDocs);
