@@ -29,7 +29,7 @@ public class Main{
 
     static StandardAnalyzer analyzer = null;
     static FSDirectory fsDirectory = null;
-    static ArrayList<File> files = null;
+    static ArrayList<File> pdfFiles = null;
 
     public static void main(String[] args) {
         String DIR = ".";
@@ -102,7 +102,7 @@ public class Main{
             System.out.println("- The top results are:");
 
             for(int id = 0; id < scoreDocs.length; id++) {
-                System.out.println("- " + files.get(scoreDocs[id].doc).getName() + " with a score of: " + scoreDocs[id].score);
+                System.out.println("- " + pdfFiles.get(scoreDocs[id].doc).getName() + " with a score of: " + scoreDocs[id].score);
             }
 
             System.out.println("");
@@ -118,7 +118,8 @@ public class Main{
     private static ArrayList<String> extractTextFromPdfs(String directory)
     {
         ArrayList<String> documentsText = new ArrayList<String>();
-        files = new ArrayList<File>();
+        ArrayList<File> files = new ArrayList<File>();
+        pdfFiles = new ArrayList<File>();
 
         getFilesInDirectory(files, directory);
 
@@ -127,7 +128,7 @@ public class Main{
 
             for(File file : files) {
                 if(!file.getName().substring(file.getName().length()-4).equals(".pdf")) continue;
-
+                pdfFiles.add(file);
                 RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
                 PDFParser parser =  new PDFParser(randomAccessFile);
                 parser.parse();
@@ -185,14 +186,13 @@ public class Main{
                 Document document = new Document();
                 document.add(new Field("content", documentText, fieldType));
 
-		//get first 100 words of string
-	        ArrayList<String> stringArr = new ArrayList<String>(Arrays.asList(documentText.split("\\s+")));
-		stringArr.subList(100, stringArr.size() - 1).clear();
-		String introString = String.join(" ", stringArr);
-		//if appears in first 100 words, then is more valid
+                //get first 100 words of string
+	            ArrayList<String> stringArr = new ArrayList<String>(Arrays.asList(documentText.split("\\s+")));
+		        String introString = String.join(" ", stringArr.subList(0, 101));
+		        //if appears in first 100 words, then is more valid
                 Field intro = new Field("intro", introString, fieldType);
                 intro.setBoost(5.0f);
-		document.add(intro);
+		        document.add(intro);
 		
                 indexWriter.addDocument(document);
             }
