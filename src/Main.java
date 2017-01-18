@@ -1,3 +1,4 @@
+import com.sun.org.apache.xpath.internal.objects.XObject;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -12,17 +13,22 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.pdfbox.cos.COSDocument;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageTree;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.io.RandomAccessFile;
+import org.apache.pdfbox.pdmodel.graphics.*;
+import org.apache.pdfbox.pdmodel.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Scanner;
+import java.util.*;
 import java.util.regex.Pattern;
 
 public class Main{
@@ -148,6 +154,50 @@ public class Main{
         return documentsText;
     }
 
+    private static HashMap<PDDocument, ArrayList<PDXObject>> extractImages(String directory)
+    {
+        ArrayList<PDImageXObject> docImages = new ArrayList<PDImageXObject>();
+        ArrayList<File> files = new ArrayList<File>();
+        pdfFiles = new ArrayList<File>();
+
+        getFilesInDirectory(files, directory);
+
+        try {
+            PDFTextStripper stripper = new PDFTextStripper();
+            Map<PDDocument, ArrayList<PDXObject>> images = new HashMap<PDDocument, ArrayList<PDXObject>>();
+            for(File file : files) {
+                if(!file.getName().substring(file.getName().length()-4).equals(".pdf")) continue;
+                pdfFiles.add(file);
+                RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
+                PDFParser parser =  new PDFParser(randomAccessFile);
+                parser.parse();
+
+                COSDocument cosDocument = parser.getDocument();
+                PDDocument pdDocument = new PDDocument(cosDocument);
+
+                PDPageTree pages = pdDocument.getDocumentCatalog().getPages();
+                Iterator<PDPage> pageIter = pages.iterator();
+                while(pageIter.hasNext())
+                {
+                    PDResources pdResources = pageIter.next().getResources();
+                    ArrayList<COSName> objList = (ArrayList<COSName>)pdResources.getXObjectNames();
+                    for(COSName n: objList)
+                    {
+                        if(pdResources.isImageXObject(n))
+                        {
+                            if(!images.get(pdDocument).isEmpty())
+                                images.get(pdDocument).add(pdResources.getXObject(n));
+                        }
+                    }
+                }
+
+                pdDocument.close();
+            }
+        }
+        catch(IOException ex) {
+            ex.printStackTrace();
+        }
+    }
     /**
      * @param files found pdfs
      * @param dirName directory to be searched in (subdirectories are also searched)
