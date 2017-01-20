@@ -194,12 +194,13 @@ public class Main {
         content.setLayout(grid);
         content.setMaximumSize(new Dimension(400, images.size() * 400));
 
-                button.addActionListener(new ActionListener() {
-                                             public void actionPerformed(ActionEvent e) {
-                                                 //FLOS FUNCTION HERE
-                                                 //Use the value of b: the current buffer image of the button clicked
-                                             }
-                                         });
+        final JPanel result = new JPanel();
+        result.setSize(new Dimension(400, 600));
+        result.setLayout(grid);
+        JLabel tutorial = new JLabel("<html>Choose an image on the left,<br><br>" +
+            "and similar images will be displayed here.</html>", SwingConstants.CENTER);
+        result.add(tutorial);
+        final JScrollPane resultPane = new JScrollPane(result);
 
         Iterator itr = images.entrySet().iterator();
         while(itr.hasNext()) {
@@ -212,8 +213,8 @@ public class Main {
                 scaledWidth = (int) (BUTTON_SIZE);
                 scaledHeight = (int) (BUTTON_SIZE * (imageHeight / (float) imageWidth));
             } else {
-                scaledWidth = (int) (BUTTON_SIZE * (imageWidth / (float) imageHeight));
-                scaledHeight = (int) (BUTTON_SIZE );
+                    scaledWidth = (int) (BUTTON_SIZE * (imageWidth / (float) imageHeight));
+                    scaledHeight = (int) (BUTTON_SIZE );
             }
 
             JButton button = new JButton(new ImageIcon(pdfPicture.image.getScaledInstance(scaledWidth, scaledHeight, Image.SCALE_SMOOTH)));
