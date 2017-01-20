@@ -31,6 +31,8 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -48,7 +50,7 @@ public class Main {
 
     public static void main(String[] args) {
         String DIR = ".";
-        String SEARCHSTRING = "";
+
 
         System.out.println("- Please enter the directory containing the PDFs.");
         System.out.println("- The directory containing the jar-file is \".\" so a subdirectory would be accessed as \"./subdir\"");
@@ -60,7 +62,6 @@ public class Main {
         images = new HashMap<String, PdfPicture>();
 
         DIR = scanner.next();
-
         File folder = new File(DIR);
         while (folder.listFiles() == null || documentsText.size() == 0) {
             if (folder.listFiles() == null) {
@@ -99,6 +100,14 @@ public class Main {
         System.out.println("- Finished Indexing PDF-Images.");
         System.out.println("");
 
+        commandSearch();
+
+    }
+
+    public static void commandSearch()
+    {
+        String SEARCHSTRING = "";
+        Scanner scanner = new Scanner(System.in);
         System.out.println("- Please select image (i) or text(t) based search: ");
         System.out.print("> ");
         String searchType = scanner.next();
@@ -107,38 +116,42 @@ public class Main {
         {
             System.out.println("Preparing...");
             openWindow();
+            return;
         }
 
-        System.out.println("- Please enter the term(s) you would like to search for. You may use AND and/or OR as keywords.");
-        System.out.println("- Examples: \"apple\"; \"apple AND pear\"; \"(apple OR pear) AND sauce\".");
-        System.out.print("> ");
-
-        while (true) {
-            SEARCHSTRING = scanner.next();
-            if (SEARCHSTRING.equals("diglib quit")) break;
-
-            TopDocs topDocs = null;
-            try {
-                //SEARCH
-                topDocs = searchPdfs(SEARCHSTRING, 10);
-            } catch (ParseException ex) {
-                System.out.println("");
-                System.out.println("- The search-string you entered contains invalid syntax. Please enter a valid search-string.");
-                System.out.print("> ");
-                continue;
-            }
-            ScoreDoc[] scoreDocs = defaultScorer(topDocs);
-
-            System.out.println("- A total of " + topDocs.totalHits + " PDFs matched your query.");
-            System.out.println("- The top results are:");
-
-            for (int id = 0; id < scoreDocs.length; id++) {
-                System.out.println("- " + pdfFiles.get(scoreDocs[id].doc).getName() + " with a score of: " + scoreDocs[id].score);
-            }
-
-            System.out.println("");
-            System.out.println("- Please enter the term(s) for your next search. You may quit anytime by entering \"diglib quit\".");
+        else if(searchType.toLowerCase().equals("t"))
+        {
+            System.out.println("- Please enter the term(s) you would like to search for. You may use AND and/or OR as keywords.");
+            System.out.println("- Examples: \"apple\"; \"apple AND pear\"; \"(apple OR pear) AND sauce\".");
             System.out.print("> ");
+
+            while (true) {
+                SEARCHSTRING = scanner.next();
+                if (SEARCHSTRING.equals("diglib quit")) break;
+
+                TopDocs topDocs = null;
+                try {
+                    //SEARCH
+                    topDocs = searchPdfs(SEARCHSTRING, 10);
+                } catch (ParseException ex) {
+                    System.out.println("");
+                    System.out.println("- The search-string you entered contains invalid syntax. Please enter a valid search-string.");
+                    System.out.print("> ");
+                    continue;
+                }
+                ScoreDoc[] scoreDocs = defaultScorer(topDocs);
+
+                System.out.println("- A total of " + topDocs.totalHits + " PDFs matched your query.");
+                System.out.println("- The top results are:");
+
+                for (int id = 0; id < scoreDocs.length; id++) {
+                    System.out.println("- " + pdfFiles.get(scoreDocs[id].doc).getName() + " with a score of: " + scoreDocs[id].score);
+                }
+
+                System.out.println("");
+                System.out.println("- Please enter the term(s) for your next search. You may quit anytime by entering \"diglib quit\".");
+                System.out.print("> ");
+            }
         }
     }
 
@@ -177,6 +190,12 @@ public class Main {
         return documentsText;
     }
 
+    /// On image browser window close
+    public static void onExit()
+    {
+        commandSearch();
+    }
+
     /// Open image browser
     public static void openWindow()
     {
@@ -184,7 +203,14 @@ public class Main {
         int button_id = 0;
         JFrame frame = new JFrame("Image Based Search");
         frame.setLayout(new GridLayout(1, 2));
-        //frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent evt) {
+                frame.dispose();
+                onExit();
+            }
+        });
         frame.setPreferredSize(new Dimension(800 * 2, 1000));
 
         final GridLayout grid = new GridLayout(0, 1);
@@ -456,6 +482,17 @@ public class Main {
             ex.printStackTrace();
         }
         return pdfPictureIds;
+    }
+
+    public static double euclideanDist(double[] features1, double[] features2)
+    {
+        double sum = 0;
+        for (int i = 0; i < features1.length; i++)
+        {
+            sum += Math.pow(features1[i] - features2[i], 2.0);
+        }
+
+        return Math.sqrt(sum);
     }
 
     private static ScoreDoc[] defaultScorer(TopDocs topDocs) {
