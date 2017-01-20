@@ -1,4 +1,10 @@
-import com.sun.org.apache.xpath.internal.objects.XObject;
+import net.semanticmetadata.lire.builders.DocumentBuilder;
+import net.semanticmetadata.lire.builders.GlobalDocumentBuilder;
+import net.semanticmetadata.lire.imageanalysis.features.global.CEDD;
+import net.semanticmetadata.lire.searchers.GenericFastImageSearcher;
+import net.semanticmetadata.lire.searchers.ImageSearchHits;
+import net.semanticmetadata.lire.searchers.ImageSearcher;
+import net.semanticmetadata.lire.utils.LuceneUtils;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -8,10 +14,7 @@ import org.apache.lucene.index.*;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
-import org.apache.lucene.search.similarities.*;
-import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.RAMDirectory;
 import org.apache.pdfbox.cos.COSDocument;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdfparser.PDFParser;
@@ -31,10 +34,8 @@ import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.List;
 import java.util.regex.Pattern;
 
 public class Main {
@@ -42,6 +43,8 @@ public class Main {
     static StandardAnalyzer analyzer = null;
     static FSDirectory fsDirectory = null;
     static ArrayList<File> pdfFiles = null;
+
+    static HashMap<String, PdfPicture> images;
 
     public static void main(String[] args) {
         String DIR = ".";
@@ -54,7 +57,7 @@ public class Main {
         Scanner scanner = new Scanner(System.in);
         scanner.useDelimiter(Pattern.compile("[\\n]"));
         ArrayList<String> documentsText = new ArrayList<String>();
-        Map<String, ArrayList<BufferedImage>> imgs = new HashMap<String, ArrayList<BufferedImage>>();
+        images = new HashMap<String, PdfPicture>();
 
         DIR = scanner.next();
 
@@ -65,10 +68,10 @@ public class Main {
                 System.out.print("> ");
             } else {
                 System.out.println("");
-                System.out.println("- Indexing PDFs. This may take some time...");
-                imgs = extractImages(DIR);
+                System.out.println("- Indexing PDF-Text. This may take some time...");
+                extractImages(DIR);
 
-                if(imgs.size() != 0)
+                if(images.size() != 0)
                     break;
                 // EXTRACT TEXT:
                 //documentsText = extractTextFromPdfs(DIR);
@@ -88,16 +91,22 @@ public class Main {
         //INDEX
         //indexPdfs(documentsText, DIR);
 
-        System.out.println("- Finished Indexing PDFs.");
+        System.out.println("- Finished Indexing PDF-Text.");
         System.out.println("");
 
-        System.out.println("- Please select image (I) or text(T) based search: ");
+        System.out.println("- Indexing PDF-Images. This may take some time...");
+        indexImages();
+        System.out.println("- Finished Indexing PDF-Images.");
+        System.out.println("");
+
+        System.out.println("- Please select image (i) or text(t) based search: ");
         System.out.print("> ");
         String searchType = scanner.next();
 
-        if(searchType.equals("I"))
+        if(searchType.toLowerCase().equals("i"))
         {
-            openWindow(imgs);
+            System.out.println("Preparing...");
+            openWindow();
         }
 
         System.out.println("- Please enter the term(s) you would like to search for. You may use AND and/or OR as keywords.");
@@ -169,47 +178,140 @@ public class Main {
     }
 
     /// Open image browser
-    public static void openWindow(Map<String, ArrayList<BufferedImage>> imgs)
+    public static void openWindow()
     {
+        final int BUTTON_SIZE = 400;
+        int button_id = 0;
         JFrame frame = new JFrame("Image Based Search");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setLayout(new GridLayout(1, 2));
+        //frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setPreferredSize(new Dimension(800 * 2, 1000));
 
-        GridLayout grid = new GridLayout(40, 2);
-        GridLayout subGrid = new GridLayout(1, 0);
+        final GridLayout grid = new GridLayout(0, 1);
+        final GridLayout subGrid = new GridLayout(1, 0);
 
         JPanel content = new JPanel();
         content.setLayout(grid);
-        content.setPreferredSize(new Dimension(4* 200, 41 * 200));
-        for(String s: imgs.keySet()) {
-            for(BufferedImage b: imgs.get(s)) {
-                JPanel subPanel = new JPanel();
-                subPanel.setLayout(subGrid);
-                subPanel.setPreferredSize(new Dimension(200, 300));
-                JButton button = new JButton(new ImageIcon(b));
+        content.setMaximumSize(new Dimension(400, images.size() * 400));
 
-                button.addActionListener(new ActionListener() {
-                                             public void actionPerformed(ActionEvent e) {
-                                                 //FLOS FUNCTION HERE
-                                                 //Use the value of b: the current buffer image of the button clicked
-                                             }
-                                         });
+        final JPanel result = new JPanel();
+        result.setSize(new Dimension(400, 600));
+        result.setLayout(grid);
+        JLabel tutorial = new JLabel("<html>Choose an image on the left,<br><br>" +
+                "and similar images will be displayed here.</html>", SwingConstants.CENTER);
+        result.add(tutorial);
+        final JScrollPane resultPane = new JScrollPane(result);
 
-                subPanel.add(button);
-                subPanel.add(new JLabel(s));
-
-                content.add(subPanel);
+        Iterator itr = images.entrySet().iterator();
+        while(itr.hasNext()) {
+            Map.Entry<String, PdfPicture> pair = (Map.Entry<String, PdfPicture>) itr.next();
+            final PdfPicture pdfPicture = pair.getValue();
+            int imageWidth = pdfPicture.image.getWidth();
+            int imageHeight = pdfPicture.image.getHeight();
+            int scaledWidth, scaledHeight = 0;
+            if(imageWidth > imageHeight) {
+                scaledWidth = (int) (BUTTON_SIZE);
+                scaledHeight = (int) (BUTTON_SIZE * (imageHeight / (float) imageWidth));
+            } else {
+                scaledWidth = (int) (BUTTON_SIZE * (imageWidth / (float) imageHeight));
+                scaledHeight = (int) (BUTTON_SIZE );
             }
+
+            JButton button = new JButton(new ImageIcon(pdfPicture.image.getScaledInstance(scaledWidth, scaledHeight, Image.SCALE_SMOOTH)));
+            button.setSize(BUTTON_SIZE, BUTTON_SIZE);
+            button.setOpaque(false);
+            button.setContentAreaFilled(false);
+            button.setName(pair.getKey());
+
+            // **************************** Button Logic ****************************
+            button.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    JButton btn = (JButton) e.getSource();
+                    ArrayList<String> ids = searchImages(images.get(btn.getName()).image, 10);
+
+                    result.removeAll();
+                    ids.remove(0);
+                    for (int i = ids.size() - 1; i >= 0; i--) {
+                        String id = ids.get(i);
+                        PdfPicture pdfPicture = images.get(id);
+                        int imageWidth = pdfPicture.image.getWidth();
+                        int imageHeight = pdfPicture.image.getHeight();
+                        int scaledWidth, scaledHeight = 0;
+                        if (imageWidth > imageHeight) {
+                            scaledWidth = (int) (BUTTON_SIZE);
+                            scaledHeight = (int) (BUTTON_SIZE * (imageHeight / (float) imageWidth));
+                        } else {
+                            scaledWidth = (int) (BUTTON_SIZE * (imageWidth / (float) imageHeight));
+                            scaledHeight = (int) (BUTTON_SIZE);
+                        }
+
+                        JButton button = new JButton(new ImageIcon(pdfPicture.image.getScaledInstance(scaledWidth, scaledHeight, Image.SCALE_SMOOTH)));
+                        button.setSize(BUTTON_SIZE, BUTTON_SIZE);
+                        button.setOpaque(false);
+                        button.setContentAreaFilled(false);
+
+                        JPanel subPanel = new JPanel();
+                        subPanel.setLayout(subGrid);
+                        subPanel.setPreferredSize(new Dimension(400, button.getHeight()));
+                        subPanel.add(button);
+
+                        String infoText = "<html>" + pdfPicture.pdfName + "<br><br> score: " + pdfPicture.score;
+                        JLabel info = new JLabel(infoText, SwingConstants.CENTER);
+                        subPanel.add(info);
+                        result.add(subPanel);
+                    }
+                    JViewport jv = resultPane.getViewport();
+                    jv.setViewPosition(new Point(0, 0)); // scroll to top
+                    resultPane.setViewportView(result);
+                }
+            });
+            // ********************************************************************
+
+            JPanel subPanel = new JPanel();
+            subPanel.setLayout(subGrid);
+            subPanel.setPreferredSize(new Dimension(400, button.getHeight()));
+            subPanel.add(button);
+
+            JLabel info = new JLabel(pdfPicture.pdfName, SwingConstants.CENTER);
+            subPanel.add(info);
+
+            content.add(subPanel);
         }
         JScrollPane scrollPane = new JScrollPane(content);
 
         frame.add(scrollPane);
+        frame.add(resultPane);
         frame.pack();
         frame.setVisible(true);
     }
 
-    private static Map<String, ArrayList<BufferedImage>> extractImages(String directory)
+    private static void indexImages() {
+        try{
+            GlobalDocumentBuilder docBuilder = new GlobalDocumentBuilder(CEDD.class);
+            IndexWriter indexWriter = LuceneUtils.createIndexWriter("image_index", true, LuceneUtils.AnalyzerType.WhitespaceAnalyzer);
+
+            Iterator itr = images.entrySet().iterator();
+            while(itr.hasNext())
+            {
+                Map.Entry<String, PdfPicture> pair = (Map.Entry<String, PdfPicture>) itr.next();
+                PdfPicture pdfPicture = pair.getValue();
+
+                BufferedImage convertedImage = new BufferedImage(pdfPicture.image.getWidth(), pdfPicture.image.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
+                convertedImage.getGraphics().drawImage(pdfPicture.image, 0, 0, null);
+                Document document = docBuilder.createDocument(convertedImage, pdfPicture.id + "");
+                indexWriter.addDocument(document);
+            }
+
+            LuceneUtils.closeWriter(indexWriter);
+        } catch(IOException ex)
+        {
+            ex.printStackTrace();
+        }
+    }
+
+    private static void extractImages(String directory)
     {
-        Map<String, ArrayList<BufferedImage>> images = new HashMap<String, ArrayList<BufferedImage>>();
+        int id = 0;
         ArrayList<File> files = new ArrayList<File>();
         pdfFiles = new ArrayList<File>();
 
@@ -236,12 +338,14 @@ public class Main {
                     {
                         if(pdResources.isImageXObject(n))
                         {
-                            images.putIfAbsent(file.getName(), new ArrayList<BufferedImage>());
                             PDXObject o = pdResources.getXObject(n);
                             if(o instanceof PDImageXObject)
                             {
                                 PDImageXObject im = (PDImageXObject)o;
-                                images.get(file.getName()).add(im.getImage());
+                                BufferedImage img = im.getImage();
+
+                                PdfPicture pdfPicture = new PdfPicture(img, file.getName());
+                                images.put(pdfPicture.id + "", pdfPicture);
                             }
                         }
                     }
@@ -253,7 +357,6 @@ public class Main {
         catch(IOException ex) {
             ex.printStackTrace();
         }
-        return images;
     }
     /**
      * @param files found pdfs
@@ -323,7 +426,7 @@ public class Main {
 
             IndexReader reader = DirectoryReader.open(fsDirectory);
             IndexSearcher searcher = new IndexSearcher(reader);
-            searcher.setSimilarity(new FairSim());
+            //searcher.setSimilarity(new FairSim());
             topDocs = searcher.search(query, numberTopDocs);
         }
         catch(IOException ex) {
@@ -333,12 +436,35 @@ public class Main {
         return topDocs;
     }
 
+    private static ArrayList<String> searchImages(BufferedImage img, int numberTopDocs) {
+        ArrayList<String> pdfPictureIds = new ArrayList<String>();
+        try {
+            IndexReader ir = DirectoryReader.open(FSDirectory.open(Paths.get("image_index")));
+            ImageSearcher searcher = new GenericFastImageSearcher(numberTopDocs, CEDD.class);
+
+            BufferedImage convertedImage = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_3BYTE_BGR);
+            convertedImage.getGraphics().drawImage(img, 0, 0, null);
+            ImageSearchHits hits = searcher.search(convertedImage, ir);
+
+            for(int i = 0; i < hits.length(); i++) {
+                String id = ir.document(hits.documentID(i)).getValues(DocumentBuilder.FIELD_NAME_IDENTIFIER)[0];
+                images.get(id).score = hits.score(i) + "";
+                pdfPictureIds.add(id);
+            }
+        }
+        catch(IOException ex) {
+            ex.printStackTrace();
+        }
+        return pdfPictureIds;
+    }
+
     private static ScoreDoc[] defaultScorer(TopDocs topDocs) {
 	ScoreDoc[] scoreDocs = topDocs.scoreDocs;
 	return scoreDocs;
     }
 }
 
+/*
 //modified similarity classes
 class FairSim extends ClassicSimilarity {
 
@@ -355,3 +481,4 @@ class FairSim extends ClassicSimilarity {
     }
 
 }
+*/
