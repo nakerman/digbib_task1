@@ -24,14 +24,18 @@ import org.apache.pdfbox.io.RandomAccessFile;
 import org.apache.pdfbox.pdmodel.graphics.*;
 import org.apache.pdfbox.pdmodel.*;
 
+import javax.swing.*;
+import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.List;
 import java.util.regex.Pattern;
 
-public class Main{
+public class Main {
 
     static StandardAnalyzer analyzer = null;
     static FSDirectory fsDirectory = null;
@@ -48,26 +52,28 @@ public class Main{
         Scanner scanner = new Scanner(System.in);
         scanner.useDelimiter(Pattern.compile("[\\n]"));
         ArrayList<String> documentsText = new ArrayList<String>();
+        Map<PDDocument, ArrayList<BufferedImage>> imgs = new HashMap<PDDocument, ArrayList<BufferedImage>>();
 
         DIR = scanner.next();
 
         File folder = new File(DIR);
-        while(folder.listFiles() == null || documentsText.size() == 0) {
-            if(folder.listFiles() == null) {
+        while (folder.listFiles() == null || documentsText.size() == 0) {
+            if (folder.listFiles() == null) {
                 System.out.println("- The directory \"" + DIR + "\" does not exist, please enter a valid directory. (did you forget the dot?)");
                 System.out.print("> ");
-            }
-            else {
+            } else {
                 System.out.println("");
                 System.out.println("- Indexing PDFs. This may take some time...");
-
+                imgs = extractImages(DIR);
+                if(imgs.size() != 0)
+                    break;
                 // EXTRACT TEXT:
-                documentsText = extractTextFromPdfs(DIR);
+                //documentsText = extractTextFromPdfs(DIR);
 
-                if(documentsText.size() != 0) break;
+               // if (documentsText.size() != 0) break;
 
-                System.out.println("- The directory \"" + DIR + "\" does not contain any PDFs, please enter a valid directory.");
-                System.out.print("> ");
+                //System.out.println("- The directory \"" + DIR + "\" does not contain any PDFs, please enter a valid directory.");
+                //System.out.print("> ");
             }
 
             scanner = new Scanner(System.in);
@@ -76,27 +82,34 @@ public class Main{
         }
 
 
-
         //INDEX
-        indexPdfs(documentsText, DIR);
+        //indexPdfs(documentsText, DIR);
 
         System.out.println("- Finished Indexing PDFs.");
         System.out.println("");
+
+        System.out.println("- Please select image (I) or text(T) based search: ");
+        System.out.print("> ");
+        String searchType = scanner.next();
+
+        if(searchType.equals("I"))
+        {
+            openWindow(imgs);
+        }
 
         System.out.println("- Please enter the term(s) you would like to search for. You may use AND and/or OR as keywords.");
         System.out.println("- Examples: \"apple\"; \"apple AND pear\"; \"(apple OR pear) AND sauce\".");
         System.out.print("> ");
 
-        while(true) {
+        while (true) {
             SEARCHSTRING = scanner.next();
-            if(SEARCHSTRING.equals("diglib quit")) break;
+            if (SEARCHSTRING.equals("diglib quit")) break;
 
             TopDocs topDocs = null;
             try {
                 //SEARCH
                 topDocs = searchPdfs(SEARCHSTRING, 10);
-            }
-            catch(ParseException ex) {
+            } catch (ParseException ex) {
                 System.out.println("");
                 System.out.println("- The search-string you entered contains invalid syntax. Please enter a valid search-string.");
                 System.out.print("> ");
@@ -107,7 +120,7 @@ public class Main{
             System.out.println("- A total of " + topDocs.totalHits + " PDFs matched your query.");
             System.out.println("- The top results are:");
 
-            for(int id = 0; id < scoreDocs.length; id++) {
+            for (int id = 0; id < scoreDocs.length; id++) {
                 System.out.println("- " + pdfFiles.get(scoreDocs[id].doc).getName() + " with a score of: " + scoreDocs[id].score);
             }
 
@@ -121,8 +134,7 @@ public class Main{
      * @param directory directory containing the pdfs (subdirectories are searched aswel)
      * @return list containing the text of the pdfs
      */
-    private static ArrayList<String> extractTextFromPdfs(String directory)
-    {
+    private static ArrayList<String> extractTextFromPdfs(String directory) {
         ArrayList<String> documentsText = new ArrayList<String>();
         ArrayList<File> files = new ArrayList<File>();
         pdfFiles = new ArrayList<File>();
@@ -132,11 +144,11 @@ public class Main{
         try {
             PDFTextStripper stripper = new PDFTextStripper();
 
-            for(File file : files) {
-                if(!file.getName().substring(file.getName().length()-4).equals(".pdf")) continue;
+            for (File file : files) {
+                if (!file.getName().substring(file.getName().length() - 4).equals(".pdf")) continue;
                 pdfFiles.add(file);
                 RandomAccessFile randomAccessFile = new RandomAccessFile(file, "r");
-                PDFParser parser =  new PDFParser(randomAccessFile);
+                PDFParser parser = new PDFParser(randomAccessFile);
                 parser.parse();
 
                 COSDocument cosDocument = parser.getDocument();
@@ -146,25 +158,77 @@ public class Main{
                 documentsText.add(documentText);
                 pdDocument.close();
             }
-        }
-        catch(IOException ex) {
+        } catch (IOException ex) {
             ex.printStackTrace();
         }
 
         return documentsText;
     }
 
-    private static HashMap<PDDocument, ArrayList<PDXObject>> extractImages(String directory)
+    /// Open image browser
+    public static void openWindow(Map<PDDocument, ArrayList<BufferedImage>> imgs)
     {
-        ArrayList<PDImageXObject> docImages = new ArrayList<PDImageXObject>();
+        JFrame frame = new JFrame("Image Based Search");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        GridBagConstraints gc=new GridBagConstraints();
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.gridx = 0;
+        gc.gridy = 0;
+        //gc.anchor = GridBagConstraints.LINE_START;
+        gc.insets = new Insets(0, 0, 0, 0);
+        gc.weightx = 1.0;
+
+        List<ArrayList<BufferedImage>> imMap = new ArrayList<ArrayList<BufferedImage>>(imgs.values());
+        List<BufferedImage> imList = new ArrayList<BufferedImage>();
+        for(ArrayList<BufferedImage> a: imMap)
+        {
+            imList.addAll(a);
+        }
+
+        GridBagLayout gridLayout = new GridBagLayout();
+        JPanel contentPane = new JPanel(gridLayout);
+
+        ArrayList<JLabel> labels = new ArrayList<JLabel>();
+        int counter = 0;
+        for(int i = 0; i < imList.size(); i+=3)
+        {
+            JPanel pan = new JPanel();
+
+            labels.add(new JLabel(new ImageIcon(imList.get(i))));
+            labels.get(i).setPreferredSize(new Dimension(200, 200));
+            pan.add(labels.get(i));
+
+            if(i + 1 < imList.size()) {
+                labels.add(new JLabel(new ImageIcon(imList.get(i + 1))));
+                labels.get(i + 1).setPreferredSize(new Dimension(200, 200));
+                pan.add(labels.get(i + 1));
+            }
+
+            if(i + 2 < imList.size()) {
+                labels.add(new JLabel(new ImageIcon(imList.get(i + 2))));
+                labels.get(i + 2).setPreferredSize(new Dimension(200, 200));
+                pan.add(labels.get(i + 2));
+            }
+            contentPane.add(pan, gc);
+            gc.gridy += 1;
+        }
+        JScrollPane scrollPane = new JScrollPane(contentPane);
+
+        frame.add(scrollPane);
+        frame.pack();
+        frame.setVisible(true);
+    }
+
+    private static Map<PDDocument, ArrayList<BufferedImage>> extractImages(String directory)
+    {
+        Map<PDDocument, ArrayList<BufferedImage>> images = new HashMap<PDDocument, ArrayList<BufferedImage>>();
         ArrayList<File> files = new ArrayList<File>();
         pdfFiles = new ArrayList<File>();
 
         getFilesInDirectory(files, directory);
 
         try {
-            PDFTextStripper stripper = new PDFTextStripper();
-            Map<PDDocument, ArrayList<PDXObject>> images = new HashMap<PDDocument, ArrayList<PDXObject>>();
             for(File file : files) {
                 if(!file.getName().substring(file.getName().length()-4).equals(".pdf")) continue;
                 pdfFiles.add(file);
@@ -180,13 +244,18 @@ public class Main{
                 while(pageIter.hasNext())
                 {
                     PDResources pdResources = pageIter.next().getResources();
-                    ArrayList<COSName> objList = (ArrayList<COSName>)pdResources.getXObjectNames();
-                    for(COSName n: objList)
+                    //ArrayList<COSName> objList = (ArrayList<COSName>)pdResources.getXObjectNames();
+                    for(COSName n: pdResources.getXObjectNames())
                     {
                         if(pdResources.isImageXObject(n))
                         {
-                            if(!images.get(pdDocument).isEmpty())
-                                images.get(pdDocument).add(pdResources.getXObject(n));
+                            images.putIfAbsent(pdDocument, new ArrayList<BufferedImage>());
+                            PDXObject o = pdResources.getXObject(n);
+                            if(o instanceof PDImageXObject)
+                            {
+                                PDImageXObject im = (PDImageXObject)o;
+                                images.get(pdDocument).add(im.getImage());
+                            }
                         }
                     }
                 }
@@ -197,6 +266,7 @@ public class Main{
         catch(IOException ex) {
             ex.printStackTrace();
         }
+        return images;
     }
     /**
      * @param files found pdfs
