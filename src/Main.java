@@ -1,6 +1,7 @@
 import net.semanticmetadata.lire.builders.DocumentBuilder;
 import net.semanticmetadata.lire.builders.GlobalDocumentBuilder;
 import net.semanticmetadata.lire.imageanalysis.features.global.CEDD;
+import net.semanticmetadata.lire.imageanalysis.features.global.FCTH;
 import net.semanticmetadata.lire.searchers.GenericFastImageSearcher;
 import net.semanticmetadata.lire.searchers.ImageSearchHits;
 import net.semanticmetadata.lire.searchers.ImageSearcher;
@@ -28,6 +29,7 @@ import org.apache.pdfbox.pdmodel.graphics.*;
 import org.apache.pdfbox.pdmodel.*;
 
 import javax.swing.*;
+import javax.xml.parsers.DocumentBuilderFactory;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -35,6 +37,8 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
@@ -71,16 +75,16 @@ public class Main {
                 System.out.println("");
                 System.out.println("- Indexing PDF-Text. This may take some time...");
                 extractImages(DIR);
+                documentsText = extractTextFromPdfs(DIR);
 
                 if(images.size() != 0)
                     break;
                 // EXTRACT TEXT:
-                //documentsText = extractTextFromPdfs(DIR);
 
-               // if (documentsText.size() != 0) break;
+                if (documentsText.size() != 0) break;
 
-                //System.out.println("- The directory \"" + DIR + "\" does not contain any PDFs, please enter a valid directory.");
-                //System.out.print("> ");
+                System.out.println("- The directory \"" + DIR + "\" does not contain any PDFs, please enter a valid directory.");
+                System.out.print("> ");
             }
 
             scanner = new Scanner(System.in);
@@ -108,6 +112,7 @@ public class Main {
     {
         String SEARCHSTRING = "";
         Scanner scanner = new Scanner(System.in);
+        scanner.useDelimiter(Pattern.compile("[\\n]"));
         System.out.println("- Please select image (i) or text(t) based search: ");
         System.out.print("> ");
         String searchType = scanner.next();
