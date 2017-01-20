@@ -26,6 +26,8 @@ import org.apache.pdfbox.pdmodel.*;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -52,7 +54,7 @@ public class Main {
         Scanner scanner = new Scanner(System.in);
         scanner.useDelimiter(Pattern.compile("[\\n]"));
         ArrayList<String> documentsText = new ArrayList<String>();
-        Map<PDDocument, ArrayList<BufferedImage>> imgs = new HashMap<PDDocument, ArrayList<BufferedImage>>();
+        Map<String, ArrayList<BufferedImage>> imgs = new HashMap<String, ArrayList<BufferedImage>>();
 
         DIR = scanner.next();
 
@@ -65,6 +67,7 @@ public class Main {
                 System.out.println("");
                 System.out.println("- Indexing PDFs. This may take some time...");
                 imgs = extractImages(DIR);
+
                 if(imgs.size() != 0)
                     break;
                 // EXTRACT TEXT:
@@ -166,63 +169,47 @@ public class Main {
     }
 
     /// Open image browser
-    public static void openWindow(Map<PDDocument, ArrayList<BufferedImage>> imgs)
+    public static void openWindow(Map<String, ArrayList<BufferedImage>> imgs)
     {
         JFrame frame = new JFrame("Image Based Search");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        GridBagConstraints gc=new GridBagConstraints();
-        gc.fill = GridBagConstraints.HORIZONTAL;
-        gc.gridx = 0;
-        gc.gridy = 0;
-        //gc.anchor = GridBagConstraints.LINE_START;
-        gc.insets = new Insets(0, 0, 0, 0);
-        gc.weightx = 1.0;
+        GridLayout grid = new GridLayout(40, 2);
+        GridLayout subGrid = new GridLayout(1, 0);
 
-        List<ArrayList<BufferedImage>> imMap = new ArrayList<ArrayList<BufferedImage>>(imgs.values());
-        List<BufferedImage> imList = new ArrayList<BufferedImage>();
-        for(ArrayList<BufferedImage> a: imMap)
-        {
-            imList.addAll(a);
-        }
+        JPanel content = new JPanel();
+        content.setLayout(grid);
+        content.setPreferredSize(new Dimension(4* 200, 41 * 200));
+        for(String s: imgs.keySet()) {
+            for(BufferedImage b: imgs.get(s)) {
+                JPanel subPanel = new JPanel();
+                subPanel.setLayout(subGrid);
+                subPanel.setPreferredSize(new Dimension(200, 300));
+                JButton button = new JButton(new ImageIcon(b));
 
-        GridBagLayout gridLayout = new GridBagLayout();
-        JPanel contentPane = new JPanel(gridLayout);
+                button.addActionListener(new ActionListener() {
+                                             public void actionPerformed(ActionEvent e) {
+                                                 //FLOS FUNCTION HERE
+                                                 //Use the value of b: the current buffer image of the button clicked
+                                             }
+                                         });
 
-        ArrayList<JLabel> labels = new ArrayList<JLabel>();
-        int counter = 0;
-        for(int i = 0; i < imList.size(); i+=3)
-        {
-            JPanel pan = new JPanel();
+                subPanel.add(button);
+                subPanel.add(new JLabel(s));
 
-            labels.add(new JLabel(new ImageIcon(imList.get(i))));
-            labels.get(i).setPreferredSize(new Dimension(200, 200));
-            pan.add(labels.get(i));
-
-            if(i + 1 < imList.size()) {
-                labels.add(new JLabel(new ImageIcon(imList.get(i + 1))));
-                labels.get(i + 1).setPreferredSize(new Dimension(200, 200));
-                pan.add(labels.get(i + 1));
+                content.add(subPanel);
             }
-
-            if(i + 2 < imList.size()) {
-                labels.add(new JLabel(new ImageIcon(imList.get(i + 2))));
-                labels.get(i + 2).setPreferredSize(new Dimension(200, 200));
-                pan.add(labels.get(i + 2));
-            }
-            contentPane.add(pan, gc);
-            gc.gridy += 1;
         }
-        JScrollPane scrollPane = new JScrollPane(contentPane);
+        JScrollPane scrollPane = new JScrollPane(content);
 
         frame.add(scrollPane);
         frame.pack();
         frame.setVisible(true);
     }
 
-    private static Map<PDDocument, ArrayList<BufferedImage>> extractImages(String directory)
+    private static Map<String, ArrayList<BufferedImage>> extractImages(String directory)
     {
-        Map<PDDocument, ArrayList<BufferedImage>> images = new HashMap<PDDocument, ArrayList<BufferedImage>>();
+        Map<String, ArrayList<BufferedImage>> images = new HashMap<String, ArrayList<BufferedImage>>();
         ArrayList<File> files = new ArrayList<File>();
         pdfFiles = new ArrayList<File>();
 
@@ -249,12 +236,12 @@ public class Main {
                     {
                         if(pdResources.isImageXObject(n))
                         {
-                            images.putIfAbsent(pdDocument, new ArrayList<BufferedImage>());
+                            images.putIfAbsent(file.getName(), new ArrayList<BufferedImage>());
                             PDXObject o = pdResources.getXObject(n);
                             if(o instanceof PDImageXObject)
                             {
                                 PDImageXObject im = (PDImageXObject)o;
-                                images.get(pdDocument).add(im.getImage());
+                                images.get(file.getName()).add(im.getImage());
                             }
                         }
                     }
