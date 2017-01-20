@@ -189,6 +189,7 @@ public class Main {
 
                 button.addActionListener(new ActionListener() {
                                              public void actionPerformed(ActionEvent e) {
+                                                 System.out.println("yay");
                                                  //FLOS FUNCTION HERE
                                                  //Use the value of b: the current buffer image of the button clicked
                                              }
